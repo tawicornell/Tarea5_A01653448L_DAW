@@ -1,0 +1,233 @@
+<style>
+  
+  .center {
+    text-align: center;
+  }
+
+
+  .endgame {
+    width: 150px;
+    height: 60px;
+    left: 0;
+    margin: 0;
+  }
+
+  p {
+    line-height: 20px;
+  }
+
+  a {
+    text-align: center;
+    background-color: salmon;
+    cursor: pointer;
+    display: none;
+  }
+
+</style>
+
+
+<main role="main" class="container">
+
+  <div class="main">
+       <p>Axel Meiguer A01653448</p>
+    <p>GD #5 - Websockets </p>
+
+<div class="endgame">
+      <p class="center">Esperando...</p>
+      <a class="center">DONE</a>
+    </div>
+
+    <p id="letter"></p>
+    <table id="players">
+    </table>
+
+    
+  </div>
+</main>
+
+
+
+<script>
+  let firstime = true
+  let countdown = 0;
+  let playerName = "";
+  let letter = "";
+  let finished = false
+  let startGame = false
+  window.socket = null;
+  players = []
+  function connectToSocketIO() {
+    let server = window.location.protocol + "//" + window.location.host; //DIRECCION DE SERVIDOR Y SOCKET con el html
+    window.socket = io.connect(server);
+    window.socket.on('checkPlayers', function (data) {
+      window.socket.emit("addPlayer", { playerName })
+    });
+
+
+    //.center a BOTON DE DONE POR JQUERY
+    window.socket.on('updatePlayers', function (data) {
+      console.log(playerName)
+      $(".endgame p").html("Esperando Juego");
+      $(".endgame p").show();
+      $(".endgame a").hide();
+      players = data.players
+      $('#players').empty()
+      $('#players').append(`
+        <tr>
+        <th>Username</th>
+        <th>Nombre</th>
+        <th>Color</th>
+        <th>Fruta</th>
+        </tr>
+        <br>
+        `);
+      for (let player of players) {
+        if (player == playerName) {
+          $('#players').append(`
+        <tr>
+          <td class="bold ">${player}</td>
+          <td><input placeholder="Nombre" id="nombre" value=""></td>
+          <td><input placeholder="color" id="color" value=""></td>
+          <td><input placeholder="fruta" id="fruta" value=""></td>
+        </tr>
+        `);
+        } else {
+          $('#players').append(`
+        <tr>
+          <td class="bold np">${player}</td>
+          <td class="np">...</td>
+          <td class="np">...</td>
+          <td class="np">...</td>
+        </tr>
+        `);
+        }
+      }
+    })
+    window.socket.on('updateTimer', function (data) {
+      $(".endgame p").html(data.timer + " segundos");
+    });
+
+    window.socket.on('playerName', function (data) {
+      playerName = data.playerName
+      console.log(playerName)
+    });
+
+    window.socket.on('theLetterIs', function (data) {
+      letter = data.letter
+    });
+
+    window.socket.on('startGame', function (data) {
+      finished = false;
+      startGame = true;
+      $(".endgame p").hide();
+      $(".endgame a").show();
+      $("#letter").html("Palabras con la letra " + letter.toUpperCase())
+    });
+
+    window.socket.on("basta", function () {
+      startCountdown()
+    });
+
+    window.socket.on("answers", function (data) {
+      let answers = data.gameAnswers
+      console.log(answers)
+      $('#players').empty()
+      $('#players').append(`
+        <tr>
+        <th>Username</th>
+        <th>Nombre</th>
+        <th>Color</th>
+        <th>Fruta</th>
+        <th>Puntos</th>
+        </tr>
+        <br>
+        `);
+      for (let a of answers) {
+
+        $('#players').append(`
+        <tr>
+          <td>${a.player}</td>
+          <td>${a.nombre}</td>
+          <td>${a.color}</td>
+          <td>${a.fruta}</td>
+          <td>${countWords(answers, a)}</td>
+        </tr>
+        `);
+      }
+    })
+
+    $(".endgame a").click(function () {
+      $('.wrong').removeClass("wrong")
+      if ($('#nombre').val() == "" || $('#nombre').val()[0].toUpperCase() != letter.toUpperCase()) { $('#nombre').addClass("wrong") }
+      if ($('#color').val() == "" || $('#color').val()[0].toUpperCase() != letter.toUpperCase()) { $('#color').addClass("wrong") }
+      if ($('#fruta').val() == "" || $('#fruta').val()[0].toUpperCase() != letter.toUpperCase()) { $('#fruta').addClass("wrong") }
+      if ($('.wrong').length == 0) {
+        sendAnswers()
+      }
+    });
+  }
+
+  function countWords(array, player) {
+    let nombrePoints = 0;
+    let colorPoints = 0;
+    let frutaPoints = 0;
+    points = [0, 100, 50, 25]
+    let total = 0;
+    for (let a of array) {
+      if (a.nombre.toUpperCase() == player.nombre.toUpperCase() && player.nombre != "") { nombrePoints++ }
+      if (a.color.toUpperCase() == player.color.toUpperCase() && player.color != "") { colorPoints++ }
+      if (a.fruta.toUpperCase() == player.fruta.toUpperCase() && player.fruta != "") { frutaPoints++ }
+    }
+
+    if (player.nombre[0].toUpperCase() != letter.toUpperCase()) { nombrePoints = 0 }
+    if (player.color[0].toUpperCase() != letter.toUpperCase()) { colorPoints = 0 }
+    if (player.fruta[0].toUpperCase() != letter.toUpperCase()) { frutaPoints = 0 }
+
+    if (nombrePoints > 3) { nombrePoints = points[3] } else { nombrePoints = points[nombrePoints] }
+    if (colorPoints > 3) { colorPoints = points[3] } else { colorPoints = points[colorPoints] }
+    if (frutaPoints > 3) { frutaPoints = points[3] } else { frutaPoints = points[frutaPoints] }
+
+    total = (nombrePoints + colorPoints + frutaPoints )
+    return Math.floor(total)
+  }
+
+  function sendAnswers() {
+    $(".endgame a").hide();
+    if (!finished) {
+      finished = true;
+      startGame = false;
+      answers = {
+        player: playerName,
+        nombre: $('#nombre').val(),
+        color: $('#color').val(),
+        fruta: $('#fruta').val()
+      }
+
+        if(answers.nombre == ""){answers.nombre = "-"}
+        if(answers.color == ""){answers.color = "-"}
+        if(answers.fruta == ""){answers.fruta = "-"}
+      console.log(answers)
+      window.socket.emit("basta", { answers })
+    }
+  }
+
+  function startCountdown() {
+    let distance = 10
+    var x = setInterval(function () {
+      $(".basta").first().fadeToggle(300);
+      $(".basta p").html("BASTA " + (10 - distance));
+      console.log(distance)
+      distance--;
+      $(".basta").first().fadeToggle(300);
+      if (distance < 0) {
+        clearInterval(x);
+        sendAnswers()
+
+      }
+    }, 1000);
+  }
+
+  $(function () {
+    connectToSocketIO();
+  })
+</script>
